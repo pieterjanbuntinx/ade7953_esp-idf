@@ -1,10 +1,16 @@
 #ifndef __ADE7953__
 #define __ADE7953__
 
+#define ADE7953_USE_SPI
+
 #include <stdint.h>
 #include <stdbool.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+
+#ifdef ADE7953_USE_SPI
+#include <driver/spi_master.h>
+#endif
 
 #define ADE7953_PREF              1540  // 4194304 / (1540 / 1000) = 2723574 (= WGAIN, VAGAIN and VARGAIN)
 #define ADE7953_UREF              26000 // 4194304 / (26000 / 10000) = 1613194 (= VGAIN)
@@ -169,7 +175,12 @@ typedef struct {
 } ade7953_data_t;
 
 typedef struct {
-    int            i2c_port_number;
+    bool enabled;
+#ifdef ADE7953_USE_SPI
+    spi_device_handle_t spi_handle;
+#else
+    int i2c_port_number;
+#endif
     uint8_t        addr;
     int32_t        calib_data[ADE7953_MAX_CHANNEL][ADE7953_CALIBREGS];
     char           chip_num;

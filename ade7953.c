@@ -1,9 +1,14 @@
 #include "ade7953.h"
-#include <driver/i2c.h>
 #include <esp_err.h>
 #include <string.h>
 #include <nvs_flash.h>
 #include <esp_timer.h>
+
+#ifndef ADE7953_USE_SPI
+#include <driver/i2c.h>
+#endif
+
+// #define DEBUG
 
 const uint16_t Ade7953CalibRegs[2][ADE7953_CALIBREGS] = {{ADE7953_AVGAIN, ADE7953_AIGAIN, ADE7953_AWGAIN, ADE7953_AVAGAIN, ADE7953_AVARGAIN, ADE7943_PHCALA},
                                                          {ADE7953_BVGAIN, ADE7953_BIGAIN, ADE7953_BWGAIN, ADE7953_BVAGAIN, ADE7953_BVARGAIN, ADE7943_PHCALB}};
@@ -30,17 +35,80 @@ static size_t ade7953_getRegSize(uint16_t reg) {
     return size;
 }
 
+#ifdef ADE7953_USE_SPI
+static esp_err_t readData(ade7953_t* ade7953, uint16_t reg, size_t len, void* data, TickType_t ticks_to_wait) {
+#ifdef DEBUG
+    printf("%s\n", __FUNCTION__);
+#endif
+
+    int      bufsize   = len + 3;
+    uint8_t* buffer_tx = malloc(bufsize);
+    memset(buffer_tx, 0x00, bufsize);
+    uint16_t tempreg = __bswap16(reg);
+    memcpy(buffer_tx, &tempreg, sizeof(tempreg));
+    buffer_tx[2] = 0x80; // Read
+
+    uint8_t* buffer_rx = malloc(bufsize);
+    memset(buffer_rx, 0, bufsize);
+
+    esp_err_t ret = spi_device_acquire_bus(ade7953->spi_handle, portMAX_DELAY);
+    if (ret != ESP_OK) goto err;
+
+#ifdef DEBUG
+    printf("tx_buf: ");
+    for (int i = 0; i < bufsize; i++) {
+        printf("0x%02x ", buffer_tx[i]);
+    }
+    printf("\n");
+#endif
+
+    spi_transaction_t t = {
+        .tx_buffer = buffer_tx,
+        .rx_buffer = buffer_rx,
+        .length    = bufsize * 8,
+        .rxlength  = bufsize * 8,
+    };
+    ret = spi_device_polling_transmit(ade7953->spi_handle, &t);
+
+#ifdef DEBUG
+    printf("rx_buf: ");
+    for (int i = 0; i < bufsize; i++) {
+        printf("0x%02x ", buffer_rx[i]);
+    }
+    printf("\n");
+#endif
+
+    if (ret == ESP_OK) {
+        memcpy(data, buffer_rx + 3, len);
+    }
+
+    spi_device_release_bus(ade7953->spi_handle);
+err:
+    if (buffer_rx != NULL) {
+        free(buffer_rx);
+    }
+    if (buffer_tx != NULL) {
+        free(buffer_tx);
+    }
+    return ret;
+}
+#else
 static esp_err_t readData(ade7953_t* ade7953, uint16_t reg, size_t len, void* data, TickType_t ticks_to_wait) {
     uint16_t  reg_temp = ((reg >> 8) | (reg << 8)) & 0xFFFF;
     esp_err_t err      = i2c_master_write_read_device(ade7953->i2c_port_number, ade7953->addr, (uint8_t*)&reg_temp, 2, data, len, ticks_to_wait);
     vTaskDelay(pdMS_TO_TICKS(1));
     return err;
 }
+#endif
 
 int32_t ade7953_readReg(ade7953_t* ade7953, uint16_t reg, TickType_t ticks_to_wait) {
-    int32_t data = 0;
-    size_t  size = ade7953_getRegSize(reg);
-    readData(ade7953, reg, size, &data, ticks_to_wait);
+    int32_t   data = 0;
+    size_t    size = ade7953_getRegSize(reg);
+    esp_err_t err  = readData(ade7953, reg, size, &data, ticks_to_wait);
+
+#ifdef DEBUG
+    printf("err: %s\n", esp_err_to_name(err));
+#endif
 
     int32_t ret = 0;
     for (int i = 0; i < size; i++) {
@@ -49,6 +117,64 @@ int32_t ade7953_readReg(ade7953_t* ade7953, uint16_t reg, TickType_t ticks_to_wa
     return ret;
 }
 
+#ifdef ADE7953_USE_SPI
+esp_err_t writeData(ade7953_t* ade7953, uint16_t reg, size_t len, void* data, TickType_t ticks_to_wait) {
+
+#ifdef DEBUG
+    printf("%s\n", __FUNCTION__);
+#endif
+
+    int bufsize = len + 3;
+
+    uint8_t* buffer_tx = malloc(bufsize);
+    uint16_t tempreg   = __bswap16(reg);
+    memcpy(buffer_tx, &tempreg, sizeof(tempreg));
+    buffer_tx[2] = 0x00; // write
+    for (int i = 0; i < len; i++) {
+        *(buffer_tx + 3 + i) = ((uint8_t*)data)[len - 1 - i];
+    }
+
+    uint8_t* buffer_rx = malloc(bufsize);
+    memset(buffer_rx, 0, bufsize);
+
+    esp_err_t ret = spi_device_acquire_bus(ade7953->spi_handle, portMAX_DELAY);
+    if (ret != ESP_OK) goto err;
+
+#ifdef DEBUG
+    printf("tx_buf: ");
+    for (int i = 0; i < bufsize; i++) {
+        printf("0x%02x ", buffer_tx[i]);
+    }
+    printf("\n");
+#endif
+
+    spi_transaction_t t = {
+        .tx_buffer = buffer_tx,
+        .rx_buffer = buffer_rx,
+        .length    = bufsize * 8,
+        .rxlength  = bufsize * 8,
+    };
+    ret = spi_device_polling_transmit(ade7953->spi_handle, &t);
+
+#ifdef DEBUG
+    printf("rx_buf: ");
+    for (int i = 0; i < bufsize; i++) {
+        printf("0x%02x ", buffer_rx[i]);
+    }
+    printf("\n");
+#endif
+
+    spi_device_release_bus(ade7953->spi_handle);
+err:
+    if (buffer_rx != NULL) {
+        free(buffer_rx);
+    }
+    if (buffer_tx != NULL) {
+        free(buffer_tx);
+    }
+    return ret;
+}
+#else
 esp_err_t writeData(ade7953_t* ade7953, uint16_t reg, size_t len, void* data, TickType_t ticks_to_wait) {
     uint16_t reg_temp       = ((reg >> 8) | (reg << 8)) & 0xFFFF;
     uint8_t* data_with_addr = malloc(len + 2);
@@ -60,32 +186,37 @@ esp_err_t writeData(ade7953_t* ade7953, uint16_t reg, size_t len, void* data, Ti
         data_with_addr[2 + i] = *ptr;
     }
 
-    // printf("reg: 0x%04x, len: %i, data: ", reg, len);
-    // for (int i = 0; i < len; i++) {
-    //     printf("%02x", ((uint8_t*)data)[i]);
-    // }
-    // printf(" data_with_addr: ");
-    // for (int i = 0; i < len + 2; i++) {
-    //     printf("%02x", ((uint8_t*)data_with_addr)[i]);
-    // }
-    // printf("\n");
+#ifdef DEBUG
+    printf("reg: 0x%04x, len: %i, data: ", reg, len);
+    for (int i = 0; i < len; i++) {
+        printf("%02x", ((uint8_t*)data)[i]);
+    }
+    printf(" data_with_addr: ");
+    for (int i = 0; i < len + 2; i++) {
+        printf("%02x", ((uint8_t*)data_with_addr)[i]);
+    }
+    printf("\n");
+#endif
 
-    esp_err_t err = i2c_master_write_to_device(ade7953->i2c_port_number, ade7953->addr, data_with_addr, len + 2, ticks_to_wait);
+    esp_err_t ret = i2c_master_write_to_device(ade7953->i2c_port_number, ade7953->addr, data_with_addr, len + 2, ticks_to_wait);
     vTaskDelay(pdMS_TO_TICKS(1));
     free(data_with_addr);
-    return err;
+    return ret;
 }
+#endif
 
 void ade7953_writeReg(ade7953_t* ade7953, uint16_t reg, int32_t data, TickType_t ticks_to_wait) {
     size_t size = ade7953_getRegSize(reg);
     writeData(ade7953, reg, size, &data, ticks_to_wait);
 
-    // int32_t d = ade7953_readReg(ade7953, reg, pdMS_TO_TICKS(100));
-    // printf("read: %04x, data: ", reg);
-    // for (int i = 0; i < size; i++) {
-    //     printf("%02x", ((uint8_t*)&d)[i]);
-    // }
-    // printf("\n");
+#ifdef DEBUG
+    int32_t d = ade7953_readReg(ade7953, reg, pdMS_TO_TICKS(100));
+    printf("read: %04x, data: ", reg);
+    for (int i = 0; i < size; i++) {
+        printf("%02x", ((uint8_t*)&d)[i]);
+    }
+    printf("\n");
+#endif
 }
 
 void ade7953_setCalibration(ade7953_t* ade7953, uint32_t regset, uint32_t calibset) {
@@ -154,6 +285,10 @@ void ade7953_saveCalibrationFromNvs(ade7953_t* ade7953) {
 }
 
 void ade7953_init(ade7953_t* ade7953, ShellyModels_t model) {
+    if (ade7953->enabled != true) {
+        ade7953->enabled = true;
+    }
+
     ade7953_setDefaultsForShellyDevice(ade7953, model);
 
     ade7953_writeReg(ade7953, ADE7953_CONFIG, 0x0004, pdMS_TO_TICKS(100));                        // Locking the communication interface
@@ -209,7 +344,6 @@ static void ade7953_task(void* arg) {
 
     if (ade7953->saveEnergiesToNvs) {
         if (err == ESP_OK) {
-            size_t required_size = 0;
 
             char nvs_key[32] = {0};
             sprintf(nvs_key, "ade7953_ena_%c", ade7953->chip_num);
