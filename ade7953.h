@@ -5,8 +5,9 @@
 #include <stdbool.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <sdkconfig.h>
 
-#ifdef ADE7953_USE_SPI
+#ifdef CONFIG_ADE7953_COMMS_PROT_SPI
 #include <driver/spi_master.h>
 #endif
 
@@ -174,7 +175,7 @@ typedef struct {
 
 typedef struct {
     bool enabled;
-#ifdef ADE7953_USE_SPI
+#ifdef CONFIG_ADE7953_COMMS_PROT_SPI
     spi_device_handle_t spi_handle;
 #else
     int i2c_port_number;

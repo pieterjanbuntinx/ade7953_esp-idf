@@ -4,7 +4,7 @@
 #include <nvs_flash.h>
 #include <esp_timer.h>
 
-#ifndef ADE7953_USE_SPI
+#ifndef CONFIG_ADE7953_COMMS_PROT_SPI
 #include <driver/i2c.h>
 #endif
 
@@ -35,7 +35,7 @@ static size_t ade7953_getRegSize(uint16_t reg) {
     return size;
 }
 
-#ifdef ADE7953_USE_SPI
+#ifdef CONFIG_ADE7953_COMMS_PROT_SPI
 static esp_err_t readData(ade7953_t* ade7953, uint16_t reg, size_t len, void* data, TickType_t ticks_to_wait) {
 #ifdef DEBUG
     printf("%s\n", __FUNCTION__);
@@ -117,7 +117,7 @@ int32_t ade7953_readReg(ade7953_t* ade7953, uint16_t reg, TickType_t ticks_to_wa
     return ret;
 }
 
-#ifdef ADE7953_USE_SPI
+#ifdef CONFIG_ADE7953_COMMS_PROT_SPI
 esp_err_t writeData(ade7953_t* ade7953, uint16_t reg, size_t len, void* data, TickType_t ticks_to_wait) {
 
 #ifdef DEBUG
@@ -232,6 +232,7 @@ void ade7953_setCalibration(ade7953_t* ade7953, uint32_t regset, uint32_t calibs
         }
         //    if (ADE7953_GAIN_DEFAULT == value) { continue; }  // ADE7953 reset
         //    does NOT always reset all registers
+        printf("calib %i %i %i val: %i\n", regset, calibset, i, value);
         ade7953_writeReg(ade7953, Ade7953CalibRegs[regset][i], value, pdMS_TO_TICKS(100));
     }
 }
@@ -380,13 +381,13 @@ static void ade7953_task(void* arg) {
 
         ade7953->data[0].voltage     = (float)vRms / 10000.0;
         ade7953->data[0].current     = (float)iRmsA / 100000.0;
-        ade7953->data[0].activePower = (float)abs(accEnergyA) / ADE7953_LSB_PER_WATTSECOND / (time / 1000 / 1000);
-        ade7953->data[0].activeEnergy += (float)abs(accEnergyA) / ADE7953_LSB_PER_WATTSECOND / 3600 / 1000;
+        ade7953->data[0].activePower = (float)abs(accEnergyA) / (float)ADE7953_LSB_PER_WATTSECOND / ((float)time / 1000.0f / 1000.0f);
+        ade7953->data[0].activeEnergy += (float)abs(accEnergyA) / (float)ADE7953_LSB_PER_WATTSECOND / 3600.0f / 1000.0f;
 
         ade7953->data[1].voltage     = (float)vRms / 10000.0;
         ade7953->data[1].current     = (float)iRmsB / 100000.0;
-        ade7953->data[1].activePower = (float)abs(accEnergyB) / ADE7953_LSB_PER_WATTSECOND / 1 / (time / 1000 / 1000);
-        ade7953->data[1].activeEnergy += (float)abs(accEnergyB) / ADE7953_LSB_PER_WATTSECOND / 3600 / 1000;
+        ade7953->data[1].activePower = (float)abs(accEnergyB) / (float)ADE7953_LSB_PER_WATTSECOND / 1 / ((float)time / 1000.0f / 1000.0f);
+        ade7953->data[1].activeEnergy += (float)abs(accEnergyB) / (float)ADE7953_LSB_PER_WATTSECOND / 3600.0f / 1000.0f;
 
         if (ade7953->saveEnergiesToNvs) {
             if (pdTICKS_TO_MS(xTaskGetTickCount() - lastEnergySavedTime) > 60 * 1000) {

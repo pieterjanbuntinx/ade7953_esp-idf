@@ -1,0 +1,20 @@
+menu "ADE7953"
+    choice COMMUNICATION_PROTOCOL
+        prompt "Communication protocol for ADE7953"
+        default ADE7953_COMMS_PROT_I2C
+        help
+            Select which communication protocol is used for this component
+
+        config ADE7953_COMMS_PROT_I2C
+            bool "I2C"
+            select COMMS_PROT_I2C
+            help
+                Select communication protocol I2C
+                
+        config ADE7953_COMMS_PROT_SPI
+            bool "SPI"
+            select COMMS_PROT_SPI
+            help            
+                Select communication protocol SPI
+    endchoice
+endmenu
