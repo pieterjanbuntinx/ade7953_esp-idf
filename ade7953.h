@@ -1,8 +1,6 @@
 #ifndef __ADE7953__
 #define __ADE7953__
 
-#define ADE7953_USE_SPI
-
 #include <stdint.h>
 #include <stdbool.h>
 #include <freertos/FreeRTOS.h>

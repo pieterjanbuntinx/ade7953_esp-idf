@@ -242,11 +242,11 @@ void ade7953_setDefaultsForShellyDevice(ade7953_t* ade7953, ShellyModels_t model
             if (ADE7943_CAL_PHCAL == i) {
                 ade7953->calib_data[channel][i] = (ADE7953_SHELLY_EM == model) ? ADE7953_PHCAL_DEFAULT_CT : ADE7953_PHCAL_DEFAULT;
             } else if (ADE7953_CAL_VGAIN == i) {
-                ade7953->calib_data[channel][i] = (int32_t)((float)ADE7953_GAIN_DEFAULT * 0.378129);
+                ade7953->calib_data[channel][i] = (int32_t)((float)ADE7953_GAIN_DEFAULT * 1.0);
             } else if (ADE7953_CAL_IGAIN == i) {
-                ade7953->calib_data[channel][i] = (int32_t)((float)ADE7953_GAIN_DEFAULT * 0.935529);
+                ade7953->calib_data[channel][i] = (int32_t)((float)ADE7953_GAIN_DEFAULT * 1.0);
             } else if (ADE7953_CAL_WGAIN == i || ADE7953_CAL_VAGAIN == i || ADE7953_CAL_VARGAIN == i) {
-                ade7953->calib_data[channel][i] = (int32_t)((float)ADE7953_GAIN_DEFAULT * 0.943565);
+                ade7953->calib_data[channel][i] = (int32_t)((float)ADE7953_GAIN_DEFAULT * 1.0);
             } else {
                 ade7953->calib_data[channel][i] = ADE7953_GAIN_DEFAULT;
             }
@@ -288,8 +288,6 @@ void ade7953_init(ade7953_t* ade7953, ShellyModels_t model) {
     if (ade7953->enabled != true) {
         ade7953->enabled = true;
     }
-
-    ade7953_setDefaultsForShellyDevice(ade7953, model);
 
     ade7953_writeReg(ade7953, ADE7953_CONFIG, 0x0004, pdMS_TO_TICKS(100));                        // Locking the communication interface
                                                                                                   // (Clear bit COMM_LOCK), Enable HPF
